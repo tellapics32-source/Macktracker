@@ -506,7 +506,7 @@
           <div class="section-title">Sales</div>
           <div class="section-sub" id="salesCountLabel">0 records</div>
         </div>
-        <button class="btn btn-amber" onclick="openModal('saleModal')" style="padding:11px 22px;font-size:14px">+ Add Sale</button>
+        <button class="btn btn-amber" onclick="openSaleModal()" style="padding:11px 22px;font-size:14px">+ Add Sale</button>
       </div>
 
       <div class="tabs">
@@ -517,6 +517,7 @@
         <button class="tab-btn" data-tab="sales-poultry">Poultry</button>
         <button class="tab-btn" data-tab="sales-pig">Pig</button>
         <button class="tab-btn" data-tab="sales-date">By Date</button>
+        <button class="tab-btn" data-tab="sales-customer">By Customer</button>
       </div>
 
       <div id="salesDatePicker" style="display:none;padding:10px 0 6px">
@@ -536,6 +537,12 @@
         <button class="tab-btn"        id="sqf-loose"  onclick="setSalesQtyFilter('loose')" style="font-size:9px;padding:4px 10px">Loose kg</button>
         <button class="tab-btn"        id="sqf-25kg"   onclick="setSalesQtyFilter('25kg')"  style="font-size:9px;padding:4px 10px">25kg Bags</button>
         <button class="tab-btn"        id="sqf-50kg"   onclick="setSalesQtyFilter('50kg')"  style="font-size:9px;padding:4px 10px">50kg Bags</button>
+      </div>
+
+      <!-- By Customer panel -->
+      <div id="salesCustomerPanel" style="display:none">
+        <input class="form-input" type="text" id="customerSearchInput" placeholder="Search customer name…" style="margin-bottom:12px" oninput="renderCustomerPanel()"/>
+        <div id="customerCardList" class="data-list"></div>
       </div>
 
       <div class="data-list" id="salesList"></div>
@@ -748,6 +755,23 @@
 <div class="modal-overlay" id="saleModal">
   <div class="modal">
     <div class="modal-title">Record Sale <button class="modal-close" onclick="closeModal('saleModal')">×</button></div>
+
+    <!-- Cart: items already added to this sale (hidden until first item is added) -->
+    <div id="saleCartBox" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:12px">
+      <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Items in this sale — each keeps its own payment</div>
+      <div id="saleCartList"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+        <span style="font-size:11px;color:var(--text3)">Items total</span>
+        <span id="saleCartTotal" style="font-family:var(--font-display);font-weight:800;color:var(--amber)">UGX 0</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Customer Name</label>
+      <input class="form-input" type="text" id="saleCustomer" placeholder="Walk-in"/>
+    </div>
+
+    <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:8px" id="saleItemLabel">Item</div>
     <div class="form-group">
       <label class="form-label">Product</label>
       <select class="form-select" id="saleProduct" onchange="updateSalePrice()">
@@ -790,7 +814,7 @@
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Total Amount (UGX)</label>
-        <input class="form-input" type="number" id="saleAmount" placeholder="Auto-calculated" min="0"/>
+        <input class="form-input" type="number" id="saleAmount" placeholder="Auto-calculated" min="0" oninput="onSaleStatusChange()"/>
       </div>
       <div class="form-group">
         <label class="form-label">Category</label>
@@ -801,52 +825,59 @@
         </select>
       </div>
     </div>
+
+    <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin:10px 0 8px">Payment — for this item</div>
     <div class="form-group">
-      <label class="form-label">Customer Name</label>
-      <input class="form-input" type="text" id="saleCustomer" placeholder="Walk-in"/>
+      <label class="form-label">Payment Status</label>
+      <select class="form-select" id="salePayStatus" onchange="onSaleStatusChange()">
+        <option value="paid">Paid in Full</option>
+        <option value="partial">Partial Payment (goods taken)</option>
+        <option value="deposit">Deposit (goods NOT taken yet)</option>
+        <option value="unpaid">Unpaid / Credit</option>
+      </select>
     </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Payment Status</label>
-        <select class="form-select" id="salePayStatus" onchange="onSaleStatusChange()">
-          <option value="paid">Paid in Full</option>
-          <option value="partial">Partial Payment (goods taken)</option>
-          <option value="deposit">Deposit (goods NOT taken yet)</option>
-          <option value="unpaid">Unpaid / Credit</option>
-        </select>
-      </div>
-      <div class="form-group" id="salePaidAmountRow" style="display:none">
-        <label class="form-label">Amount Paid Now</label>
-        <input class="form-input" type="number" id="salePaidAmount" placeholder="0" min="0" oninput="onSaleStatusChange()"/>
-        <div id="saleBalanceHint" style="font-size:10px;color:var(--amber);margin-top:4px"></div>
-      </div>
-      <div class="form-group" id="saleSplitRow" style="display:none">
-        <label class="form-label">Split Payment? (optional)</label>
-        <div style="display:flex;gap:8px;align-items:center">
-          <input class="form-input" type="number" id="saleSplitAmount" placeholder="MoMo amount" min="0" style="flex:1" oninput="onSaleStatusChange()"/>
-          <select class="form-select" id="saleSplitMethod" style="flex:1">
-            <option value="mobile_money">MoMo</option>
-            <option value="cash">Cash</option>
-          </select>
+    <div class="form-group" id="salePaidAmountRow" style="display:none">
+      <label class="form-label">Amount Paid Now</label>
+      <input class="form-input" type="number" id="salePaidAmount" placeholder="0" min="0" oninput="onSaleStatusChange()"/>
+      <div id="saleBalanceHint" style="font-size:10px;color:var(--amber);margin-top:4px"></div>
+    </div>
+    <div class="form-group" id="saleSplitRow" style="display:none">
+      <label class="form-label">Paid via</label>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label" style="font-size:9px">Cash</label>
+          <input class="form-input" type="number" id="salePayCash" placeholder="0" min="0" oninput="onSplitInput('cash')"/>
         </div>
-        <div id="saleSplitHint" style="font-size:10px;color:var(--text3);margin-top:4px"></div>
+        <div class="form-group">
+          <label class="form-label" style="font-size:9px">MoMo</label>
+          <input class="form-input" type="number" id="salePayMomo" placeholder="0" min="0" oninput="onSplitInput('momo')"/>
+        </div>
       </div>
-      <div class="form-group">
-        <label class="form-label">Payment Method</label>
-        <select class="form-select" id="salePayMethod">
-          <option value="cash">Cash</option>
-          <option value="mobile_money">Mobile Money</option>
-        </select>
-      </div>
+      <div id="saleSplitHint" style="font-size:10px;margin-top:2px"></div>
     </div>
+
+    <div class="form-group">
+      <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:12px" onclick="addCartItem()">+ Add This Item &amp; Start Another</button>
+    </div>
+    <div class="divider"></div>
+
     <div class="form-group">
       <label class="form-label">Date</label>
       <input class="form-input" type="date" id="saleDate"/>
     </div>
     <div class="form-actions">
-      <button class="btn btn-amber" style="flex:1;justify-content:center" onclick="submitSale()">Record Sale</button>
+      <button class="btn btn-amber" style="flex:1;justify-content:center" id="saleSubmitBtn" onclick="submitSale()">Record Sale</button>
       <button class="btn btn-ghost" onclick="closeModal('saleModal')">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- Customer Payment History -->
+<div class="modal-overlay" id="custHistModal">
+  <div class="modal">
+    <div class="modal-title"><span id="custHistName">Customer</span> <button class="modal-close" onclick="closeModal('custHistModal')">×</button></div>
+    <div id="custHistSummary"></div>
+    <div id="custHistList"></div>
   </div>
 </div>
 
@@ -1322,7 +1353,7 @@ async function filterDayBreakdown(date, type) {
     <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
       <div>
         <div style="font-size:12px;color:var(--text)">${s.product_name}</div>
-        <div style="font-size:10px;color:var(--text3)">${s.quantity_value} ${s.quantity_type} · ${s.customer_name||'Walk-in'} · <span style="color:var(--blue)">${s.payment_method==='mobile_money'?'MoMo':'Cash'}</span>${s.ts?' · '+new Date(s.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}):''}</div>
+        <div style="font-size:10px;color:var(--text3)">${s.quantity_value} ${s.quantity_type} · ${s.customer_name||'Walk-in'} · <span style="color:var(--blue)">${saleMethodLabel(s)}</span>${s.ts?' · '+new Date(s.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}):''}</div>
       </div>
       <div style="font-family:var(--font-display);font-size:13px;font-weight:700;color:${s.payment_status==='paid'?'var(--green)':'var(--red)'}">+${fmt(s.amount)}</div>
     </div>`).join('') || '<div class="empty"><div class="empty-text">No sales of this type</div></div>';
@@ -1561,7 +1592,7 @@ async function renderPrepayReport() {
           <span style="font-size:10px;color:var(--text3)">Total: <b style="color:var(--text)">${fmt(s.amount)}</b></span>
           <span style="font-size:10px;color:var(--text3)">Paid: <b style="color:var(--green)">${fmt(paidAmt)}</b></span>
           ${!isPaid ? `<span style="font-size:10px;color:var(--text3)">Owed: <b style="color:var(--red)">${fmt(balance)}</b></span>` : ''}
-          <span style="font-size:10px;color:var(--text3)">${s.payment_method === 'mobile_money' ? 'MoMo' : 'Cash'}</span>
+          <span style="font-size:10px;color:var(--text3)">${saleMethodLabel(s)}</span>
         </div>
         ${!isPaid ? `<button class="btn btn-ghost" style="font-size:10px;padding:3px 8px;margin-top:6px" onclick="openPaymentModal(${s.id},'${s.payment_status}','${s.payment_method}')">Settle →</button>` : ''}
       </div>`;
@@ -2030,9 +2061,41 @@ function dbPut(store, data) {
     if (!db.objectStoreNames.contains(store)) { resolve(null); return; }
     const tx = db.transaction(store, 'readwrite');
     const req = tx.objectStore(store).put(data);
-    req.onsuccess = () => resolve(req.result);
+    req.onsuccess = () => { resolve(req.result); if (store === 'inventory') checkLowStockAlert(data); };
     req.onerror = () => reject(req.error);
   });
+}
+
+// ─────────────────────────────────────────────
+// Instant low-stock alert. Every inventory write (sale,
+// restock, adjustment, audit) goes through dbPut('inventory', ...)
+// above, so hooking there covers all of them without touching any
+// of the individual sale/restock/adjustment code.
+// Fires once when an item first dips to/under the threshold, then
+// stays quiet on further sales of the same item until it's restocked
+// back above the threshold — so it warns you, not spams you.
+// ─────────────────────────────────────────────
+const LOW_STOCK_THRESHOLD_KEY = 'macktrack_low_stock_threshold';
+function lowStockThreshold() {
+  const v = parseFloat(localStorage.getItem(LOW_STOCK_THRESHOLD_KEY));
+  return isNaN(v) ? 3 : v;
+}
+function escHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+function checkLowStockAlert(item) {
+  if (!item || !item.product_name) return;
+  const key = 'macktrack_low_stock_alerted:' + item.product_name + '|' + item.quantity_type;
+  const stock = item.current_stock || 0;
+  const threshold = lowStockThreshold();
+  if (stock > threshold) {
+    localStorage.removeItem(key); // back above the line — re-arm for next time
+    return;
+  }
+  if (localStorage.getItem(key)) return; // already warned about this dip, stay quiet
+  localStorage.setItem(key, '1');
+  const label = stock <= 0 ? '🔴 OUT OF STOCK' : '⚠️ LOW STOCK';
+  tgSend(label + '\n<b>' + escHtml(item.product_name) + '</b> (' + escHtml(item.quantity_type) + ')\nRemaining: ' +
+    (stock % 1 === 0 ? stock : stock.toFixed(1)));
 }
 
 function dbDelete(store, key) {
@@ -2210,6 +2273,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
       if (picker) picker.style.display = f === 'date' ? 'block' : 'none';
       const qtyBar = document.getElementById('salesQtyFilterBar');
       if (qtyBar) qtyBar.style.display = (f === 'all' || f === 'date') ? 'flex' : 'none';
+      const custPanel = document.getElementById('salesCustomerPanel');
+      const salesListEl = document.getElementById('salesList');
+      if (custPanel) custPanel.style.display = f === 'customer' ? 'block' : 'none';
+      if (salesListEl) salesListEl.style.display = f === 'customer' ? 'none' : 'block';
       // Reset qty filter on tab change
       _salesQtyFilter = 'all';
       ['all','loose','25kg','50kg'].forEach(t => {
@@ -2228,7 +2295,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             PRODUCTS.map(p => `<option value="${p}"${cur===p?' selected':''}>${p}</option>`).join('');
         }
       }
-      renderSales(f);
+      if (f === 'customer') renderCustomerPanel();
+      else renderSales(f);
     }
     else if (tab.startsWith('rep-')) {
       document.querySelectorAll('.report-tab').forEach(t => t.style.display = 'none');
@@ -2432,9 +2500,9 @@ async function renderDashboard() {
   const _todayStr = new Date().toISOString().slice(0,10);
   const _todaySales = sales.filter(s => s.date === _todayStr);
   const _todayExp   = expenses.filter(e => e.date === _todayStr);
-  saveDailyBankable(_todayStr, _todaySales.filter(s=>s.payment_status==='paid'&&s.payment_method==='cash').reduce((a,s)=>a+s.amount,0) - _todayExp.filter(e=>e.payment_method==='cash').reduce((a,e)=>a+e.amount,0),
-    _todaySales.filter(s=>s.payment_status==='paid'&&s.payment_method==='cash').reduce((a,s)=>a+s.amount,0),
-    _todaySales.filter(s=>s.payment_status==='paid'&&s.payment_method==='mobile_money').reduce((a,s)=>a+s.amount,0),
+  saveDailyBankable(_todayStr, _todaySales.reduce((a,s)=>a+getSaleCashReceived(s),0) - _todayExp.filter(e=>e.payment_method==='cash').reduce((a,e)=>a+e.amount,0),
+    _todaySales.reduce((a,s)=>a+getSaleCashReceived(s),0),
+    _todaySales.reduce((a,s)=>a+getSaleMomoReceived(s),0),
     _todayExp.reduce((a,e)=>a+e.amount,0),
     _todaySales, _todayExp);
   document.getElementById('statMomo').textContent = fmtShort(paidMomo - momoExp);
@@ -2500,35 +2568,183 @@ function getUnitPrice(product, qtyType) {
   return (val === undefined || val === null || val === 0) ? null : val;
 }
 
+// ─────────────────────────────────────────────
+// Multi-item cart — lets one sale cover several
+// products for one customer under one payment.
+// ─────────────────────────────────────────────
+let saleCart = [];
+
+// Reads the item fields AND this item's own payment fields together,
+// validates, and returns one fully-formed item (with its own
+// payment_status/paid_amount/balance/payments). Each item in a multi-item
+// sale can be paid differently — one paid, one on credit, one split — so
+// payment is captured per item, not once for the whole cart.
+function currentItemFields(opts) {
+  const silent = opts && opts.silent;
+  const product_name  = document.getElementById('saleProduct').value;
+  const quantity_type  = document.getElementById('saleQtyType').value;
+  const quantity_value = parseFloat(document.getElementById('saleQty').value);
+  const amount         = parseFloat(document.getElementById('saleAmount').value);
+  const category        = document.getElementById('saleCategory').value;
+  const discount = quantity_type !== 'loose' ? Math.min(parseInt(document.getElementById('saleDiscount')?.value) || 0, 3000) : 0;
+  if (!quantity_value || !amount) {
+    if (!silent) showToast('Fill in quantity and amount first', 'error');
+    return null;
+  }
+
+  const status = document.getElementById('salePayStatus').value;
+  const isPaidFull = status === 'paid';
+  const isPartialOrDeposit = status === 'partial' || status === 'deposit';
+  const paid_amount = isPaidFull ? amount
+    : isPartialOrDeposit ? (parseFloat(document.getElementById('salePaidAmount').value) || 0)
+    : 0;
+  const cash = (status === 'unpaid') ? 0 : (parseFloat(document.getElementById('salePayCash')?.value) || 0);
+  const momo = (status === 'unpaid') ? 0 : (parseFloat(document.getElementById('salePayMomo')?.value) || 0);
+
+  if (paid_amount > 0 && (cash + momo) !== paid_amount) {
+    if (!silent) showToast('Cash + MoMo (' + fmt(cash+momo) + ') must equal the amount paid (' + fmt(paid_amount) + ')', 'error');
+    return null;
+  }
+  if (paid_amount > amount) {
+    if (!silent) showToast('Amount paid can\'t be more than the item total', 'error');
+    return null;
+  }
+
+  const _ts = new Date().toISOString();
+  const _date = document.getElementById('saleDate').value;
+  const payments = [];
+  if (cash > 0) payments.push({ amount: cash, method: 'cash', date: _date, ts: _ts });
+  if (momo > 0) payments.push({ amount: momo, method: 'mobile_money', date: _date, ts: _ts });
+  const balance = amount - paid_amount;
+
+  return {
+    product_name, quantity_type, quantity_value, amount, category, discount,
+    payment_status: balance <= 0 ? 'paid' : status,
+    paid_amount, balance: Math.max(0, balance), payments,
+    payment_method: payments[0] ? payments[0].method : 'cash', // legacy field, kept for old code paths
+  };
+}
+
+function clearCurrentItemFields() {
+  document.getElementById('saleQty').value = '';
+  document.getElementById('saleAmount').value = '';
+  const discEl = document.getElementById('saleDiscount'); if (discEl) discEl.value = '';
+  const hintEl = document.getElementById('salePriceHint'); if (hintEl) hintEl.style.display = 'none';
+  document.getElementById('salePayStatus').value = 'paid';
+  const paidEl = document.getElementById('salePaidAmount'); if (paidEl) paidEl.value = '';
+  const cashEl = document.getElementById('salePayCash'); if (cashEl) { cashEl.value=''; delete cashEl.dataset.touched; }
+  const momoEl = document.getElementById('salePayMomo'); if (momoEl) { momoEl.value=''; delete momoEl.dataset.touched; }
+  onSaleStatusChange();
+}
+
+function openSaleModal() {
+  saleCart = [];
+  renderSaleCart();
+  document.getElementById('saleCustomer').value = '';
+  clearCurrentItemFields();
+  const dateEl = document.getElementById('saleDate'); if (dateEl && !dateEl.value) dateEl.value = today();
+  openModal('saleModal');
+}
+
+function addCartItem() {
+  const item = currentItemFields();
+  if (!item) return; // currentItemFields() already showed the specific error
+  saleCart.push(item);
+  clearCurrentItemFields();
+  renderSaleCart();
+  showToast(item.product_name + ' added (' + (item.payment_status === 'paid' ? 'paid' : item.payment_status === 'unpaid' ? 'unpaid' : 'partial') + ') — add the next item or record the sale', 'success');
+}
+
+function removeCartItem(idx) {
+  saleCart.splice(idx, 1);
+  renderSaleCart();
+}
+
+function statusBadge(status) {
+  if (status === 'paid') return '<span class="badge badge-green" style="font-size:9px">PAID</span>';
+  if (status === 'unpaid') return '<span class="badge badge-red" style="font-size:9px">UNPAID</span>';
+  if (status === 'deposit') return '<span class="badge badge-amber" style="font-size:9px">DEPOSIT</span>';
+  return '<span class="badge badge-amber" style="font-size:9px">PARTIAL</span>';
+}
+
+function renderSaleCart() {
+  const box = document.getElementById('saleCartBox');
+  const list = document.getElementById('saleCartList');
+  const totalEl = document.getElementById('saleCartTotal');
+  const itemLabel = document.getElementById('saleItemLabel');
+  if (!saleCart.length) { box.style.display = 'none'; if (itemLabel) itemLabel.textContent = 'Item'; return; }
+  box.style.display = 'block';
+  if (itemLabel) itemLabel.textContent = 'Next item';
+  list.innerHTML = saleCart.map((it, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;color:var(--text2)">${it.product_name} · ${it.quantity_value} ${it.quantity_type}
+        <div style="margin-top:2px">${statusBadge(it.payment_status)} <span style="font-size:9px;color:var(--text3)">${saleMethodLabel(it)}</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;font-weight:700;color:var(--text)">${fmt(it.amount)}</span>
+        <span style="color:var(--red);cursor:pointer;font-size:13px" onclick="removeCartItem(${i})">✕</span>
+      </div>
+    </div>`).join('');
+  totalEl.textContent = fmt(saleCart.reduce((a,x)=>a+x.amount,0));
+}
+
 function onSaleStatusChange() {
   const status = document.getElementById('salePayStatus').value;
   const row = document.getElementById('salePaidAmountRow');
   const splitRow = document.getElementById('saleSplitRow');
   const isPaidFull = status === 'paid';
   const isPartialOrDeposit = status === 'partial' || status === 'deposit';
+  const amount = parseFloat(document.getElementById('saleAmount')?.value) || 0;
 
   if (row) row.style.display = isPartialOrDeposit ? 'block' : 'none';
-  // Show split for paid-in-full too (customer might pay part cash part momo)
   if (splitRow) splitRow.style.display = (isPaidFull || isPartialOrDeposit) ? 'block' : 'none';
 
-  const amt    = parseFloat(document.getElementById('saleAmount')?.value) || 0;
-  const paid   = parseFloat(document.getElementById('salePaidAmount')?.value) || 0;
-  const split  = parseFloat(document.getElementById('saleSplitAmount')?.value) || 0;
-  const totalPaid = isPaidFull ? amt : paid;
-  const splitHint = document.getElementById('saleSplitHint');
-  const balHint   = document.getElementById('saleBalanceHint');
+  const paid = isPaidFull ? amount : (parseFloat(document.getElementById('salePaidAmount')?.value) || 0);
 
-  if (splitHint && split > 0) {
-    const mainAmt = isPaidFull ? amt - split : paid - split;
-    splitHint.textContent = fmt(mainAmt) + ' ' + (document.getElementById('salePayMethod').value === 'cash' ? 'Cash' : 'MoMo') + ' + ' + fmt(split) + ' ' + (document.getElementById('saleSplitMethod').value === 'mobile_money' ? 'MoMo' : 'Cash');
-  } else if (splitHint) {
-    splitHint.textContent = '';
+  // Default the split fields: whole amount in Cash, 0 in MoMo — matches
+  // the common case (one method) with nothing extra to fill in, while
+  // staying editable for an actual split.
+  const cashEl = document.getElementById('salePayCash');
+  const momoEl = document.getElementById('salePayMomo');
+  if (cashEl && momoEl && !cashEl.dataset.touched && !momoEl.dataset.touched) {
+    cashEl.value = paid || '';
+    momoEl.value = '';
   }
+  updateSplitHint();
 
-  if (balHint && amt > 0 && paid > 0 && paid < amt) {
-    balHint.textContent = 'Balance owed: ' + fmt(amt - paid);
+  const balHint = document.getElementById('saleBalanceHint');
+  if (balHint && amount > 0 && paid > 0 && paid < amount) {
+    balHint.textContent = 'Balance owed on this item: ' + fmt(amount - paid);
   } else if (balHint) {
     balHint.textContent = '';
+  }
+}
+
+function onSplitInput(which) {
+  const el = document.getElementById(which === 'cash' ? 'salePayCash' : 'salePayMomo');
+  if (el) el.dataset.touched = '1';
+  updateSplitHint();
+}
+
+function updateSplitHint() {
+  const hint = document.getElementById('saleSplitHint');
+  if (!hint) return;
+  const status = document.getElementById('salePayStatus').value;
+  const amount = parseFloat(document.getElementById('saleAmount')?.value) || 0;
+  const paid = status === 'paid' ? amount : (parseFloat(document.getElementById('salePaidAmount')?.value) || 0);
+  const cash = parseFloat(document.getElementById('salePayCash')?.value) || 0;
+  const momo = parseFloat(document.getElementById('salePayMomo')?.value) || 0;
+  const diff = paid - (cash + momo);
+  if (paid <= 0) { hint.textContent = ''; return; }
+  if (diff === 0) {
+    hint.style.color = 'var(--green)';
+    hint.textContent = '✓ ' + fmt(cash) + ' Cash + ' + fmt(momo) + ' MoMo = ' + fmt(paid);
+  } else if (diff > 0) {
+    hint.style.color = 'var(--amber)';
+    hint.textContent = fmt(diff) + ' not yet assigned to Cash or MoMo';
+  } else {
+    hint.style.color = 'var(--red)';
+    hint.textContent = 'Cash + MoMo is ' + fmt(-diff) + ' more than the amount paid';
   }
 }
 
@@ -2602,6 +2818,9 @@ function updateSalePrice() {
       ? `−UGX ${(discountPerBag * qty).toLocaleString()} total discount`
       : '';
   }
+
+  // Step 8: keep this item's payment summary in sync as the amount changes
+  onSaleStatusChange();
 }
 
 // ═══════════════════════════════════════════════
@@ -2904,6 +3123,111 @@ async function renderSales(filter) {
   el.innerHTML = sales.map(s => _saleRow(s)).join('');
 }
 
+async function renderCustomerPanel() {
+  const term = (document.getElementById('customerSearchInput')?.value || '').trim().toLowerCase();
+  const sales = await dbGetAll('sales');
+  const byCust = {};
+  for (const s of sales) {
+    const name = s.customer_name || 'Walk-in';
+    if (name === 'Walk-in') continue; // nothing to trace for an unnamed customer
+    if (!byCust[name]) byCust[name] = { name, total: 0, owed: 0, count: 0, last: '' };
+    const c = byCust[name];
+    c.total += s.amount || 0;
+    c.owed += s.balance || 0;
+    c.count += 1;
+    if (s.date > c.last) c.last = s.date;
+  }
+  let customers = Object.values(byCust);
+  if (term) customers = customers.filter(c => c.name.toLowerCase().includes(term));
+  customers.sort((a, b) => {
+    if ((a.owed > 0) !== (b.owed > 0)) return (b.owed > 0) - (a.owed > 0); // debtors first
+    if (a.owed !== b.owed) return b.owed - a.owed;
+    return b.last.localeCompare(a.last);
+  });
+
+  const el = document.getElementById('customerCardList');
+  if (!customers.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">👤</div><div class="empty-text">${term ? 'No matching customers' : 'No named customers yet'}</div></div>`;
+    return;
+  }
+  el.innerHTML = customers.map(c => `
+    <div class="data-row" style="cursor:pointer" onclick="openCustomerHistory('${c.name.replace(/'/g,"\\'")}')">
+      <div class="data-row-main">
+        <div class="data-row-title">${c.name}</div>
+        <div class="data-row-meta">
+          <span>${c.count} sale${c.count===1?'':'s'}</span>
+          <span style="color:var(--text3)">·</span>
+          <span>Last: ${fmtDate(c.last)}</span>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <div class="data-row-amount" style="color:var(--text)">${fmtShort(c.total)}</div>
+        ${c.owed > 0 ? `<span class="badge badge-red">Owes ${fmt(c.owed)}</span>` : `<span class="badge badge-green">Settled</span>`}
+      </div>
+    </div>`).join('');
+}
+
+async function openCustomerHistory(name) {
+  const sales = (await dbGetAll('sales')).filter(s => s.customer_name === name).sort((a,b) => b.date.localeCompare(a.date) || b.id - a.id);
+  const total = sales.reduce((a,s)=>a+s.amount,0);
+  const owed = sales.reduce((a,s)=>a+s.balance,0);
+  const cash = sales.reduce((a,s)=>a+getSaleCashReceived(s),0);
+  const momo = sales.reduce((a,s)=>a+getSaleMomoReceived(s),0);
+
+  document.getElementById('custHistName').textContent = name;
+  document.getElementById('custHistSummary').innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center">
+        <div style="font-size:9px;color:var(--text3);letter-spacing:1px">LIFETIME</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text)">${fmt(total)}</div>
+      </div>
+      <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center">
+        <div style="font-size:9px;color:var(--text3);letter-spacing:1px">OWES</div>
+        <div style="font-size:13px;font-weight:700;color:${owed>0?'var(--red)':'var(--green)'}">${fmt(owed)}</div>
+      </div>
+      <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center">
+        <div style="font-size:9px;color:var(--text3);letter-spacing:1px">CASH / MOMO</div>
+        <div style="font-size:11px;font-weight:700;color:var(--text)">${fmtShort(cash)} / ${fmtShort(momo)}</div>
+      </div>
+    </div>`;
+
+  // Group by txn_id so a multi-item sale shows as one card, not several
+  const groups = [];
+  const seen = {};
+  for (const s of sales) {
+    const key = s.txn_id || ('single-' + s.id);
+    if (seen[key] === undefined) { seen[key] = groups.length; groups.push({ date: s.date, items: [] }); }
+    groups[seen[key]].items.push(s);
+  }
+
+  document.getElementById('custHistList').innerHTML = groups.map(g => {
+    const groupTotal = g.items.reduce((a,s)=>a+s.amount,0);
+    const groupPaid = g.items.reduce((a,s)=>a+s.paid_amount,0);
+    const groupBalance = g.items.reduce((a,s)=>a+s.balance,0);
+    const statuses = new Set(g.items.map(s=>s.payment_status));
+    const statusLabel = statuses.size > 1 ? 'MIXED' : [...statuses][0].toUpperCase();
+    const statusColor = groupBalance > 0 ? 'badge-red' : 'badge-green';
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-size:10px;color:var(--text3)">${fmtDate(g.date)}${g.items.length>1?' · '+g.items.length+' items':''}</span>
+        <span class="badge ${statusColor}" style="font-size:9px">${statusLabel}</span>
+      </div>
+      ${g.items.map(s => `
+        <div style="display:flex;justify-content:space-between;padding:3px 0">
+          <span style="font-size:11px;color:var(--text2)">${s.product_name} · ${s.quantity_value}${s.quantity_type}</span>
+          <span style="font-size:11px;color:var(--text)">${fmt(s.amount)}</span>
+        </div>`).join('')}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+        <span style="font-size:10px;color:var(--text3)">${saleMethodLabel(g.items[0])}${groupBalance>0?' · Bal: '+fmt(groupBalance):''}</span>
+        <span style="font-size:12px;font-weight:700;color:${groupBalance>0?'var(--red)':'var(--green)'}">${fmt(groupTotal)}</span>
+      </div>
+      ${groupBalance > 0 ? `<button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:10px;margin-top:6px" onclick="closeModal('custHistModal');openPaymentModal(${g.items.find(s=>s.balance>0).id}, '${g.items.find(s=>s.balance>0).payment_status}', '${g.items.find(s=>s.balance>0).payment_method||'cash'}')">Settle Balance →</button>` : ''}
+    </div>`;
+  }).join('');
+
+  openModal('custHistModal');
+}
+
 function _saleRow(s) { return `<div class="data-row">
       <div class="data-row-main">
         <div class="data-row-title">${s.product_name}</div>
@@ -2922,7 +3246,7 @@ function _saleRow(s) { return `<div class="data-row">
           ${(s.payment_status === 'partial' || s.payment_status === 'deposit') && s.balance > 0 ? `<span class="badge badge-red">Bal: ${fmt(s.balance)}</span>` : ''}
           ${s.payment_status === 'deposit' ? '<span class="badge badge-amber" style="font-size:9px">GOODS IN STORE</span>' : ''}
           ${s.payments && s.payments.length > 1 ? '<span class="badge badge-blue" style="font-size:9px">SPLIT</span>' : ''}
-          <span class="badge badge-gray">${s.payment_method === 'mobile_money' ? 'MoMo' : 'Cash'}</span>
+          <span class="badge badge-gray">${saleMethodLabel(s)}</span>
           <span class="badge badge-blue">${s.category}</span>
           ${s.discount > 0 ? '<span class="badge badge-amber">-UGX '+s.discount.toLocaleString()+'/bag disc</span>' : ''}
         </div>
@@ -2938,87 +3262,94 @@ function _saleRow(s) { return `<div class="data-row">
   `;
 }
 
+// Proportionally allocates one overall payment (status + cash/momo split)
+// across however many cart line items make up a sale. Guarantees, for
+// every item: paid_amount + balance === amount, and payments[] sums to
+// exactly paid_amount — so per-item records always reconcile, even when
+// the grand total doesn't divide evenly between items.
 async function submitSale() {
-  const product_name = document.getElementById('saleProduct').value;
-  const quantity_type = document.getElementById('saleQtyType').value;
-  const quantity_value = parseFloat(document.getElementById('saleQty').value);
-  const amount = parseFloat(document.getElementById('saleAmount').value);
-  const category = document.getElementById('saleCategory').value;
+  // The trailing item (whatever's in the fields right now) gets validated
+  // the same way addCartItem() validates one — silently skipped only if
+  // genuinely empty (cart-only submit), otherwise its own errors surface.
+  const hasTrailingInput = (parseFloat(document.getElementById('saleQty').value) || 0) > 0
+    || (parseFloat(document.getElementById('saleAmount').value) || 0) > 0;
+  let currentItem = null;
+  if (hasTrailingInput) {
+    currentItem = currentItemFields();
+    if (!currentItem) return; // its own specific error was already shown
+  } else if (!saleCart.length) {
+    showToast('Add quantity and amount, or add at least one item', 'error');
+    return;
+  }
+  const items = [...saleCart, ...(currentItem ? [currentItem] : [])];
   const customer_name = document.getElementById('saleCustomer').value || 'Walk-in';
-  const payment_status = document.getElementById('salePayStatus').value;
-  const payment_method = document.getElementById('salePayMethod').value;
   const date = document.getElementById('saleDate').value;
-  const discount = quantity_type !== 'loose' ? Math.min(parseInt(document.getElementById('saleDiscount')?.value) || 0, 3000) : 0;
 
-  if (!quantity_value || !amount || !date) { showToast('Fill in all required fields', 'error'); return; }
+  if (!date) { showToast('Pick a date', 'error'); return; }
   try {
     const _lc = await dbGetAll('day_close');
     if (_lc.find(d => d.date === date)) { showToast('🔒 ' + fmtDate(date) + ' is locked — change the date', 'error'); return; }
   } catch(e) {}
 
-
-  // Stock check — block sale if insufficient stock (not for deposits)
-  if (payment_status !== 'deposit') {
-    const stockCheck = await dbGet('inventory', [product_name, quantity_type]);
+  // Stock check — every item, combining duplicate product+type lines, before writing anything.
+  // A deposit item doesn't reserve stock (goods not taken yet); others do.
+  const needed = {};
+  for (const it of items) {
+    if (it.payment_status === 'deposit') continue;
+    const k = it.product_name + '|' + it.quantity_type;
+    needed[k] = (needed[k] || 0) + it.quantity_value;
+  }
+  for (const k in needed) {
+    const [pname, qtype] = k.split('|');
+    const stockCheck = await dbGet('inventory', [pname, qtype]);
     const available = stockCheck ? (stockCheck.current_stock || 0) : 0;
-    if (available < quantity_value) {
-      showToast('Not enough stock — only ' + (available % 1 === 0 ? available : available.toFixed(1)) + ' ' + quantity_type + ' available', 'error');
+    if (available < needed[k]) {
+      showToast('Not enough stock for ' + pname + ' — only ' + (available % 1 === 0 ? available : available.toFixed(1)) + ' ' + qtype + ' available', 'error');
       return;
     }
   }
 
-  const paid_amount = (payment_status === 'partial' || payment_status === 'deposit')
-    ? (parseFloat(document.getElementById('salePaidAmount').value) || 0)
-    : (payment_status === 'paid' ? amount : 0);
-  const balance = amount - paid_amount;
+  const grand = items.reduce((a,x)=>a+x.amount, 0);
+  const totalPaid = items.reduce((a,x)=>a+x.paid_amount, 0);
+  const txn_id = items.length > 1 ? (Date.now() + '-' + Math.random().toString(36).slice(2,7)) : undefined;
+  const _ts = new Date().toISOString();
 
-  // Build payments array — handle split payment
-  const split_amount = parseFloat(document.getElementById('saleSplitAmount')?.value) || 0;
-  const split_method = document.getElementById('saleSplitMethod')?.value || 'mobile_money';
-  const main_paid = paid_amount - split_amount;
-  const first_payment = [];
-  const _now_ts = new Date().toISOString();
-  if (main_paid > 0)   first_payment.push({ amount: main_paid,   method: payment_method, date, ts: _now_ts });
-  if (split_amount > 0) first_payment.push({ amount: split_amount, method: split_method,   date, ts: _now_ts });
-  // Clear split field after use
-  if (document.getElementById('saleSplitAmount')) document.getElementById('saleSplitAmount').value = '';
+  for (const row of items) {
+    const record = {
+      product_name: row.product_name, quantity_type: row.quantity_type, quantity_value: row.quantity_value,
+      amount: row.amount, discount: row.discount, category: row.category,
+      customer_name, payment_status: row.payment_status, payment_method: row.payment_method, date,
+      paid_amount: row.paid_amount, balance: row.balance, payments: row.payments, ts: _ts
+    };
+    if (txn_id) record.txn_id = txn_id;
+    await dbAdd('sales', record);
 
-  await dbAdd('sales', {
-    product_name, quantity_type, quantity_value, amount, discount,
-    category, customer_name, payment_status, payment_method, date,
-    paid_amount, balance,
-    payments: first_payment,
-    ts: new Date().toISOString()
-  });
-
-  // Deduct stock — deposit sales do NOT deduct (goods not taken yet)
-  if (payment_status !== 'deposit') {
-    const _invKey = [product_name, quantity_type];
-    const _inv = await dbGet('inventory', _invKey);
-    if (_inv) {
-      _inv.current_stock = (_inv.current_stock || 0) - quantity_value;
-      await dbPut('inventory', _inv);
+    if (row.payment_status !== 'deposit') {
+      const _inv = await dbGet('inventory', [row.product_name, row.quantity_type]);
+      if (_inv) { _inv.current_stock = (_inv.current_stock || 0) - row.quantity_value; await dbPut('inventory', _inv); }
     }
   }
 
   // Reset form
-  document.getElementById('saleQty').value = '';
-  document.getElementById('saleAmount').value = '';
+  saleCart = [];
   document.getElementById('saleCustomer').value = '';
-  const discEl = document.getElementById('saleDiscount'); if(discEl) discEl.value = '';
-  const hintEl = document.getElementById('salePriceHint'); if(hintEl) hintEl.style.display='none';
+  clearCurrentItemFields();
+  renderSaleCart();
 
-  await logActivity('SALE', product_name + ' · ' + quantity_value + ' ' + quantity_type + ' · ' + fmt(amount) + ' · ' + payment_status);
+  const itemSummary = items.map(it => it.product_name + ' ' + it.quantity_value + it.quantity_type).join(', ');
+  await logActivity('SALE', itemSummary + ' · ' + fmt(grand));
+  const allSameStatus = items.every(it => it.payment_status === items[0].payment_status);
   tgSend(tgFmt('SALE', [
-    '📦 <b>' + product_name + '</b>',
-    '🔢 Qty: ' + quantity_value + ' × ' + quantity_type,
-    '💰 Amount: <b>' + fmt(amount) + '</b>',
-    '👤 Customer: ' + (customer_name || 'Walk-in'),
-    '💳 Payment: ' + (payment_status === 'paid' ? '✅ Paid' : payment_status === 'partial' ? '🔶 Partial' : payment_status === 'deposit' ? '📥 Deposit' : '❌ Unpaid') + ' · ' + (payment_method === 'mobile_money' ? 'MoMo' : 'Cash'),
-    paid_amount < amount ? '⚠ Balance: ' + fmt(amount - paid_amount) : '✓ Fully settled'
-  ]));
+    items.length > 1
+      ? items.map(it => '📦 <b>' + it.product_name + '</b> — ' + it.quantity_value + ' × ' + it.quantity_type + ' (' + fmt(it.amount) + ') · ' + (it.payment_status === 'paid' ? '✅' : it.payment_status === 'unpaid' ? '❌' : '🔶') + ' ' + saleMethodLabel(it)).join('\n')
+      : '📦 <b>' + items[0].product_name + '</b>\n🔢 Qty: ' + items[0].quantity_value + ' × ' + items[0].quantity_type,
+    '💰 Total: <b>' + fmt(grand) + '</b>',
+    '👤 Customer: ' + customer_name,
+    items.length === 1 ? '💳 Payment: ' + (items[0].payment_status === 'paid' ? '✅ Paid' : items[0].payment_status === 'partial' ? '🔶 Partial' : items[0].payment_status === 'deposit' ? '📥 Deposit' : '❌ Unpaid') + (items[0].paid_amount > 0 ? ' · ' + saleMethodLabel(items[0]) : '') : (allSameStatus ? '' : '💳 Mixed payment — see items above'),
+    totalPaid < grand ? '⚠ Balance: ' + fmt(grand - totalPaid) : '✓ Fully settled'
+  ].filter(Boolean)));
   closeModal('saleModal');
-  showToast('Sale recorded ✓', 'success'); triggerSync();
+  showToast((items.length > 1 ? items.length + '-item sale' : 'Sale') + ' recorded ✓', 'success'); triggerSync();
   if (currentPage === 'sales') renderSales();
   if (currentPage !== 'dashboard') renderDashboard();
   if (currentPage !== 'reports') renderReports();
@@ -4507,8 +4838,8 @@ async function openDayClose() {
   const [sales, expenses] = await Promise.all([dbGetAll('sales'), dbGetAll('expenses')]);
   const todaySales = sales.filter(s => s.date === todayStr);
   const todayExp = expenses.filter(e => e.date === todayStr);
-  const cash = todaySales.filter(s => s.payment_status==='paid' && s.payment_method==='cash').reduce((a,s)=>a+s.amount,0);
-  const momo = todaySales.filter(s => s.payment_status==='paid' && s.payment_method==='mobile_money').reduce((a,s)=>a+s.amount,0);
+  const cash = todaySales.reduce((a,s)=>a+getSaleCashReceived(s),0);
+  const momo = todaySales.reduce((a,s)=>a+getSaleMomoReceived(s),0);
   const unpaid = todaySales.filter(s => s.payment_status==='unpaid').reduce((a,s)=>a+s.amount,0);
   const exp = todayExp.reduce((a,e)=>a+e.amount,0);
   const cashExpClose = todayExp.filter(e => e.payment_method === 'cash').reduce((a,e) => a+e.amount, 0);
@@ -4601,8 +4932,8 @@ async function renderMonthlySummary() {
 
   el.innerHTML = months.map((m, mi) => {
     const data = byMonth[m];
-    const cash = data.sales.filter(s=>s.payment_status==='paid'&&s.payment_method==='cash').reduce((a,s)=>a+s.amount,0);
-    const momo = data.sales.filter(s=>s.payment_status==='paid'&&s.payment_method==='mobile_money').reduce((a,s)=>a+s.amount,0);
+    const cash = data.sales.reduce((a,s)=>a+getSaleCashReceived(s),0);
+    const momo = data.sales.reduce((a,s)=>a+getSaleMomoReceived(s),0);
     const unpaid = data.sales.filter(s=>s.payment_status==='unpaid').reduce((a,s)=>a+s.amount,0);
     const exp = data.expenses.reduce((a,e)=>a+e.amount,0);
     const cashOnlyExp = data.expenses.filter(e=>e.payment_method==='cash').reduce((a,e)=>a+e.amount,0);
@@ -4744,22 +5075,23 @@ async function openDashDrill(type) {
   } else if (type === 'paid') {
     title = 'Paid Revenue';
     items = sales.filter(s => s.payment_status === 'paid').sort((a,b) => b.date.localeCompare(a.date));
-    const cash = items.filter(s => s.payment_method === 'cash').reduce((a,s) => a+s.amount, 0);
-    const momo = items.filter(s => s.payment_method === 'mobile_money').reduce((a,s) => a+s.amount, 0);
+    const cash = items.reduce((a,s) => a+getSaleCashReceived(s), 0);
+    const momo = items.reduce((a,s) => a+getSaleMomoReceived(s), 0);
     summaryHTML = `<div style="background:var(--bg3);border-radius:8px;padding:12px;margin-bottom:10px">
       <div style="font-size:22px;font-weight:900;font-family:var(--font-display);color:var(--green);margin-bottom:8px">${fmt(cash+momo)}</div>
       <div style="display:flex;gap:10px">
-        <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center">
+        <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center;cursor:pointer" onclick="openDashDrill('cash')">
           <div style="font-size:9px;color:var(--text3);letter-spacing:1px">CASH</div>
           <div style="font-size:14px;font-weight:700;color:var(--green)">${fmt(cash)}</div>
-          <div style="font-size:9px;color:var(--text3)">${items.filter(s=>s.payment_method==='cash').length} sales</div>
+          <div style="font-size:9px;color:var(--text3)">${items.filter(s=>getSaleCashReceived(s)>0).length} sales</div>
         </div>
-        <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center">
+        <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center;cursor:pointer" onclick="openDashDrill('momo')">
           <div style="font-size:9px;color:var(--text3);letter-spacing:1px">MOMO</div>
           <div style="font-size:14px;font-weight:700;color:var(--blue)">${fmt(momo)}</div>
-          <div style="font-size:9px;color:var(--text3)">${items.filter(s=>s.payment_method==='mobile_money').length} sales</div>
+          <div style="font-size:9px;color:var(--text3)">${items.filter(s=>getSaleMomoReceived(s)>0).length} sales</div>
         </div>
       </div>
+      <div style="font-size:9px;color:var(--text3);text-align:center;margin-top:8px">Tap Cash or MoMo above to see which sales made it up</div>
     </div>`;
 
   } else if (type === 'unpaid') {
@@ -4780,27 +5112,34 @@ async function openDashDrill(type) {
       ${custRows}
     </div>`;
 
-  } else if (type === 'momo') {
-    title = 'MoMo Balance';
-    items = sales.filter(s => s.payment_status === 'paid' && s.payment_method === 'mobile_money').sort((a,b) => b.date.localeCompare(a.date));
-    const total = items.reduce((a,s) => a+s.amount, 0);
-    const momoExp = expenses.filter(e => e.payment_method === 'mobile_money').reduce((a,e) => a+e.amount, 0);
+  } else if (type === 'momo' || type === 'cash') {
+    const getAmt = type === 'momo' ? getSaleMomoReceived : getSaleCashReceived;
+    title = type === 'momo' ? 'MoMo Received' : 'Cash Received';
+    const accent = type === 'momo' ? 'var(--blue)' : 'var(--green)';
+    // Includes ANY sale with a real contribution by this method — covers
+    // split payments and balances settled later via a different method
+    // than the original sale, not just sales whose single payment_method
+    // matches (that's what used to make these entries go missing here).
+    items = sales.filter(s => getAmt(s) > 0).sort((a,b) => b.date.localeCompare(a.date));
+    const total = items.reduce((a,s) => a+getAmt(s), 0);
+    const methodExp = expenses.filter(e => e.payment_method === (type === 'momo' ? 'mobile_money' : 'cash')).reduce((a,e) => a+e.amount, 0);
     summaryHTML = `<div style="background:var(--bg3);border-radius:8px;padding:12px;margin-bottom:10px">
-      <div style="font-size:22px;font-weight:900;font-family:var(--font-display);color:var(--blue);margin-bottom:8px">${fmt(total)}</div>
+      <div style="font-size:22px;font-weight:900;font-family:var(--font-display);color:${accent};margin-bottom:8px">${fmt(total)}</div>
       <div style="display:flex;gap:10px">
         <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center">
           <div style="font-size:9px;color:var(--text3);letter-spacing:1px">RECEIVED</div>
-          <div style="font-size:14px;font-weight:700;color:var(--blue)">${fmt(total)}</div>
+          <div style="font-size:14px;font-weight:700;color:${accent}">${fmt(total)}</div>
         </div>
         <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center">
-          <div style="font-size:9px;color:var(--text3);letter-spacing:1px">MOMO EXP</div>
-          <div style="font-size:14px;font-weight:700;color:var(--red)">${fmt(momoExp)}</div>
+          <div style="font-size:9px;color:var(--text3);letter-spacing:1px">${type==='momo'?'MOMO':'CASH'} EXP</div>
+          <div style="font-size:14px;font-weight:700;color:var(--red)">${fmt(methodExp)}</div>
         </div>
         <div style="flex:1;background:var(--bg2);border-radius:6px;padding:8px;text-align:center">
           <div style="font-size:9px;color:var(--text3);letter-spacing:1px">NET</div>
-          <div style="font-size:14px;font-weight:700;color:var(--blue)">${fmt(total-momoExp)}</div>
+          <div style="font-size:14px;font-weight:700;color:${accent}">${fmt(total-methodExp)}</div>
         </div>
       </div>
+      <div style="font-size:9px;color:var(--text3);text-align:center;margin-top:8px">${items.length} sale${items.length===1?'':'s'} contributed ${type==='momo'?'MoMo':'cash'} — split-payment sales show only their ${type==='momo'?'MoMo':'cash'} portion below</div>
     </div>`;
 
   } else if (type === 'expenses') {
@@ -4841,17 +5180,22 @@ async function openDashDrill(type) {
         <div style="font-family:var(--font-display);font-size:13px;font-weight:700;color:var(--red)">${fmt(e.amount)}</div>
       </div>`).join('');
   } else {
-    listEl.innerHTML = items.map(s => `
+    const portionOf = type === 'momo' ? getSaleMomoReceived : type === 'cash' ? getSaleCashReceived : null;
+    listEl.innerHTML = items.map(s => {
+      const shown = portionOf ? portionOf(s) : s.amount;
+      const isPartialPortion = portionOf && shown < s.amount;
+      return `
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
         <div>
           <div style="font-size:12px;color:var(--text)">${s.product_name}</div>
           <div style="font-size:10px;color:var(--text3);margin-top:2px">${s.quantity_value} × ${s.quantity_type} · ${s.customer_name||'Walk-in'} · ${fmtDate(s.date)}${s.ts?' · '+new Date(s.ts).toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}):''}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-family:var(--font-display);font-size:13px;font-weight:700;color:${s.payment_status==='paid'?'var(--green)':'var(--red)'}">${fmt(s.amount)}</div>
-          <div style="font-size:9px;color:var(--text3)">${s.payment_method==='mobile_money'?'MoMo':'Cash'}</div>
+          <div style="font-family:var(--font-display);font-size:13px;font-weight:700;color:${s.payment_status==='paid'?'var(--green)':'var(--red)'}">${fmt(shown)}</div>
+          <div style="font-size:9px;color:var(--text3)">${isPartialPortion ? 'of ' + fmt(s.amount) + ' · ' : ''}${saleMethodLabel(s)}</div>
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   if (!items.length) listEl.innerHTML = '<div class="empty"><div class="empty-text">No records</div></div>';
@@ -4900,6 +5244,25 @@ function getSaleMomoReceived(s) {
   return 0;
 }
 
+// Which method(s) actually funded a sale, for display — the top-level
+// payment_method only ever reflects the FIRST payment, so once a sale is
+// split or its balance is later settled via a different method, payments[]
+// is the only accurate source.
+function saleMethodsUsed(s) {
+  if (s.payments && s.payments.length) {
+    const seen = new Set();
+    for (const p of s.payments) if (p.amount > 0) seen.add(p.method);
+    if (seen.size) return [...seen];
+  }
+  return s.payment_method ? [s.payment_method] : [];
+}
+function saleMethodLabel(s) {
+  const m = saleMethodsUsed(s);
+  if (m.length > 1) return 'Cash+MoMo';
+  if (m.length === 0) return '—';
+  return m[0] === 'mobile_money' ? 'MoMo' : 'Cash';
+}
+
 
 function saveTgConfig() {
   const token = document.getElementById('tgTokenInput').value.trim();
@@ -4934,10 +5297,19 @@ function openSyncModal() {
   const tgC = document.getElementById('tgChatInput');
   if (tgT) tgT.value = TG_CONFIG.TOKEN || '';
   if (tgC) tgC.value = TG_CONFIG.CHAT_ID || '';
+  const lowStockEl = document.getElementById('lowStockInput');
+  if (lowStockEl) lowStockEl.value = lowStockThreshold();
   const gistId = localStorage.getItem(GIST_ID_KEY);
   const idEl = document.getElementById('syncGistId');
   if (idEl) idEl.textContent = gistId ? 'Gist ID: ' + gistId : 'No backup created yet';
   openModal('syncModal');
+}
+
+function saveLowStockThreshold() {
+  const val = parseFloat(document.getElementById('lowStockInput').value);
+  if (isNaN(val) || val < 0) { showToast('Enter a valid number', 'error'); return; }
+  localStorage.setItem(LOW_STOCK_THRESHOLD_KEY, String(val));
+  showToast('Low stock alert level saved ✓', 'success');
 }
 
 </script>
@@ -4987,6 +5359,15 @@ function openSyncModal() {
       </div>
       <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:11px" onclick="saveTgConfig()">Save Telegram Config</button>
       <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:11px;margin-top:6px" onclick="testTelegram()">Send Test Message</button>
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:14px">
+      <div style="font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Low Stock Alerts</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:10px;line-height:1.7">The moment any item's stock drops to or below this number, you get an instant Telegram alert — no waiting for the evening summary. It only warns once per dip; restocking it resets the warning.</div>
+      <div class="form-group">
+        <label class="form-label">Alert when stock is at or below</label>
+        <input class="form-input" type="number" step="0.1" id="lowStockInput" placeholder="3"/>
+      </div>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:11px" onclick="saveLowStockThreshold()">Save</button>
     </div>
     <div id="syncGistId" style="font-size:10px;color:var(--text3);margin-top:12px;text-align:center"></div>
   </div>
